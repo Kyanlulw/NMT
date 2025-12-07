@@ -1,5 +1,6 @@
-datasets
-sentencepiece
-torch
-torchvision
-tqdm
+datasets >= 1.18.3
+sentencepiece >= 0.1.97
+torch >= 1.13.0 
+torchvision >= 0.14.0
+tqdm >= 4.64.1
+accelerate >= 0.18.0
