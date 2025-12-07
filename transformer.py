@@ -4,7 +4,7 @@ from layers import *
 
 import torch
 
-class Transformer():
+class Transformer(nn.Module):
     def __init__(self, src_vocab_size, trg_vocab_size):
         super().__init__()
         self.src_vocab_size = src_vocab_size
