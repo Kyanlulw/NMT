@@ -6,6 +6,7 @@ import torch
 
 class Transformer():
     def __init__(self, src_vocab_size, trg_vocab_size):
+        super().__init__()
         self.src_vocab_size = src_vocab_size
         self.trg_vocab_size = trg_vocab_size
         
@@ -35,7 +36,7 @@ class Transformer():
 
 class Encoder(nn.Module):
     def __init__(self):
-        super.__init__()
+        super().__init__()
         self.layers = nn.ModuleList([EncoderLayer() for i in range(num_layers)])
         self.layernorm = LayerNormalization()
 
@@ -47,7 +48,7 @@ class Encoder(nn.Module):
 
 class Decoder(nn.Module):
     def __init__(self):
-        super.__init__()
+        super().__init__()
         self.layers = nn.ModuleList([DecoderLayer() for i in range(num_layers)])
         self.layernorm = LayerNormalization()
 

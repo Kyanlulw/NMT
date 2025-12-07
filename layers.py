@@ -119,7 +119,7 @@ class FeedForwardLayer(nn.Module):
 
 class LayerNormalization(nn.Module):
     def __init__ (self, eps = 1e-6):
-        super(LayerNormalization, self).__init__()
+        super().__init__()
         self.eps = eps
         self.layer = nn.LayerNorm([d_model], elementwise_affine = True ,eps = self.eps)
 
