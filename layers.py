@@ -129,7 +129,7 @@ class LayerNormalization(nn.Module):
     
 class PositionalEncoder(nn.Module):
     def __init__(self):
-        super.__init__()
+        super().__init__()
         #positional encoding with size (seq_len, d_model) becuase we add this to embedding of same size
         pe_matrix = torch.zeros(seq_len, d_model) # (seq_len, d_model)
 
