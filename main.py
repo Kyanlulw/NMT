@@ -32,9 +32,9 @@ class Manager():
             print("Loading SentencePiece models...")
 
         self.src_sp = spm.SentencePieceProcessor()
-        self.src_sp.Load(f"{SP_DIR}/{SRC_MODEL_PREFIX}.model")
+        self.src_sp.Load(f"{SP_DIR}/{src_model_prefix}.model")
         self.trg_sp = spm.SentencePieceProcessor()
-        self.trg_sp.Load(f"{SP_DIR}/{TRG_MODEL_PREFIX}.model")
+        self.trg_sp.Load(f"{SP_DIR}/{trg_model_prefix}.model")
         
         self.src_vocab_size = self.src_sp.GetPieceSize()
         self.trg_vocab_size = self.trg_sp.GetPieceSize()
