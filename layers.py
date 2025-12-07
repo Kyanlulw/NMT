@@ -107,7 +107,7 @@ class FeedForwardLayer(nn.Module):
         super().__init__()
         self.linear_layer1 = nn.Linear(d_model, d_ff, bias = True)
         self.activation = nn.ReLU()
-        self.linear_layer2 = nn.linear(d_ff, d_model, bias = True)
+        self.linear_layer2 = nn.Linear(d_ff, d_model, bias = True)
         self.dropout = nn.Dropout(drop_out_rate)
 
     def forward(self, x):
