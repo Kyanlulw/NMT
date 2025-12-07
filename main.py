@@ -17,7 +17,7 @@ import heapq
 import sentencepiece as spm
 
 class Manager():    
-    def __init__(self, is_train=True, ckpt_name=None, dataset_name=None):
+    def __init__(self, is_train=True, ckpt_name=None):
         
         # 1. INITIALIZE ACCELERATOR
         # This automatically detects if you have 1 GPU, 4 GPUs, or TPUs.
@@ -35,6 +35,7 @@ class Manager():
         self.src_sp.Load(f"{SP_DIR}/{src_model_prefix}.model")
         self.trg_sp = spm.SentencePieceProcessor()
         self.trg_sp.Load(f"{SP_DIR}/{trg_model_prefix}.model")
+        self.dataset_name = DATASET_NAME
         
         self.src_vocab_size = self.src_sp.GetPieceSize()
         self.trg_vocab_size = self.trg_sp.GetPieceSize()
@@ -77,7 +78,7 @@ class Manager():
             self.criterion = nn.CrossEntropyLoss(ignore_index=-100)
             
             # Get the standard PyTorch dataloader
-            raw_loader = get_dataloader(dataset_name, self.src_sp, self.trg_sp)
+            raw_loader = get_dataloader(self.dataset_name, self.src_sp, self.trg_sp)
             
             # 5. THE MAGIC LINE: ACCELERATOR.PREPARE
             # This wraps the model in DDP, moves it to GPU, and 
@@ -90,9 +91,9 @@ class Manager():
         if self.accelerator.is_main_process:
             print("Training starts.")
             
-        num_epochs = self.config.get('epochs', 10)
+        epochs = num_epochs
         
-        for epoch in range(1, num_epochs + 1):
+        for epoch in range(1, epochs + 1):
             self.model.train()
             train_losses = []
             
@@ -157,7 +158,7 @@ class Manager():
                     }, f"{ckpt_dir}/best_ckpt.tar")
                     print("Checkpoint Saved.")
         
-    def validation(self, dataset_name = None):
+    def validation(self):
         print("Validation processing...")
         self.model.eval()
         
@@ -365,7 +366,7 @@ if __name__=='__main__':
         else:
             manager = Manager(is_train=True)
 
-        manager.train(dataset_name=args.dataset_name)
+        manager.train()
     elif args.mode == 'inference':
         assert args.ckpt_name is not None, "Please specify the model file name you want to use."
         assert args.input is not None, "Please specify the input sentence to translate."

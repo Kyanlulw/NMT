@@ -1,7 +1,7 @@
 import torch
 
 # Path or parameters for data
-# DATASET_NAME = 'data'
+DATASET_NAME = ''
 SP_DIR = 'trained_tokenizer'
 SRC_DIR = 'src'
 TRG_DIR = 'trg'
