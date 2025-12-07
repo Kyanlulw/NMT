@@ -126,26 +126,44 @@ class LayerNormalization(nn.Module):
     def forward(self, x):
         x = self.layer(x)
         return x
-    
-class PositionalEncoder(nn.Module):
-    def __init__(self):
-        super().__init__()
-        #positional encoding with size (seq_len, d_model) becuase we add this to embedding of same size
-        pe_matrix = torch.zeros(seq_len, d_model) # (seq_len, d_model)
 
-        #calculate positional encoding values
-        for pos in range(seq_len):
-            for i in range(d_model):
-                if i % 2 == 0:
-                    pe_matrix[pos, i] = math.sin(pos / (10000 ** ((2 * i)/d_model)))
-                elif i % 2 == 1:
-                    pe_matrix[pos, i] = math.cos(pos / (10000 ** ((2 * i)/d_model)))
-                
-        pe_matrix = pe_matrix.unsqueeze(0) # (1, seq_len, d_model)
-        self.postional_encoding = pe_matrix.to(device = device).require_grad_(False)
+class PositionalEncoder(nn.Module):
+    def __init__(self, d_model = d_model, max_len = seq_len):
+        # Pass d_model and max_len as args, don't rely on globals!
+        super().__init__()
+
+        # 1. Create Matrix (on CPU initially)
+        pe = torch.zeros(max_len, d_model)
+
+        # 2. Vectorized Calculation (Fast!)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        # Calculate the division term in log space for numerical stability
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+
+        # Apply Sine to even indices
+        pe[:, 0::2] = torch.sin(position * div_term)
+        # Apply Cosine to odd indices
+        pe[:, 1::2] = torch.cos(position * div_term)
+
+        # Add batch dimension: (1, max_len, d_model)
+        pe = pe.unsqueeze(0)
+
+        # 3. THE MAGIC LINE
+        # We register it as a "buffer".
+        # - It is NOT a parameter (won't be updated by optimizer).
+        # - It WILL be moved to GPU automatically by Accelerator.
+        # - It WILL be saved in state_dict.
+        self.register_buffer('pe', pe)
 
     def forward(self, x):
-        x = x * math.sqrt(d_model) #scale embedding
-        x = x + self.positional__encoding[:, :x.size(1), :] #add positional encoding
+        # x shape: (Batch_Size, Seq_Len, d_model)
 
-        return x 
+        # Scale embedding (Standard Transformer practice)
+        x = x * math.sqrt(x.size(-1))
+
+        # Add PE
+        # We slice self.pe to the length of the current input x
+        # self.pe is already on the correct device!
+        x = x + self.pe[:, :x.size(1), :]
+
+        return x
