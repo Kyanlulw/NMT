@@ -42,10 +42,10 @@ def get_dataloader(dataset_name, src_sp, trg_sp, batch_size = batch_size, split 
         for text in tgt_texts:
             encoded = trg_sp.EncodeAsIds(text)
             # Input: [BOS] + [IDs]
-            tgt_input_batch.append([bos_id] + encoded)
-            # Label: [IDs] + [EOS]
             if len(encoded) > max_len - 2:  # -2 for BOS/EOS
                 encoded = encoded[:max_len - 2]
+            tgt_input_batch.append([bos_id] + encoded)
+            # Label: [IDs] + [EOS]
             tgt_label_batch.append(encoded + [eos_id])
 
         return {
