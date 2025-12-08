@@ -13,7 +13,7 @@ class Transformer(nn.Module):
         self.src_embedding = nn.Embedding(self.src_vocab_size, d_model)
         self.trg_embedding = nn.Embedding(self.trg_vocab_size, d_model)
 
-        self.positional_encoding = PositionalEncoder(d_model = d_model, max_len = seq_len)
+        self.positional_encoding = PositionalEncoder(d_model = d_model, max_len = 5000)
         self.encoder = Encoder()
         self.decoder = Decoder()
         self.output_linear = nn.Linear(d_model, trg_vocab_size)
