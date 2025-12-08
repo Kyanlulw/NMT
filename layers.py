@@ -142,7 +142,7 @@ class LayerNormalization(nn.Module):
         return x
 
 class PositionalEncoder(nn.Module):
-    def __init__(self, d_model = d_model, max_len = seq_len):
+    def __init__(self, d_model = d_model, max_len = 5000):
         # Pass d_model and max_len as args, don't rely on globals!
         super().__init__()
 
