@@ -158,9 +158,9 @@ class Manager():
             # 8. LOGGING & SAVING (Main Process Only)
             # We wait for all GPUs to finish the epoch before saving
             self.accelerator.wait_for_everyone()
-            
-            # Calculate mean loss across all GPUs for accurate reporting
-            val_loss, val_time = self.validation()
+
+            if global_step % 500 == 0:
+                val_loss, val_time = self.validation()
 
             if self.accelerator.is_main_process:
                 print(f"Epoch {epoch} | Val Loss: {val_loss:.4f} | Time: {val_time}")
