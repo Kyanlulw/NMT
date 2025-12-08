@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 import torch
 
-def get_dataloader(dataset_name, src_sp, trg_sp, batch_size = batch_size, split = 'train[:500000'):
+def get_dataloader(dataset_name, src_sp, trg_sp, batch_size = batch_size, split = ''):
     print(f"Loading {dataset_name}...")
     dataset = load_dataset(dataset_name, split=split)
 
