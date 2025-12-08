@@ -90,42 +90,33 @@ class Manager():
     def train(self):
         if self.accelerator.is_main_process:
             print("Training starts.")
-            
+
         epochs = num_epochs
-        
+
         for epoch in range(1, epochs + 1):
             self.model.train()
             train_losses = []
-            
+
             # Disable tqdm on non-main processes to avoid messy output
-            progress_bar = tqdm(
-                self.train_loader, 
-                desc=f"Epoch {epoch}", 
-                disable=not self.accelerator.is_main_process
-            )
+            progress_bar = tqdm(self.train_loader, disable=not self.accelerator.is_main_process)
 
             for batch in progress_bar:
-                # 6. DATA PLACEMENT
-                # Accelerator handles .to(device) automatically!
-                # You just unpack.
-                src_padded, tgt_in_padded, tgt_out_padded, e_mask, d_mask = batch
-                
-                # Forward pass
-                output = self.model(src_padded, tgt_in_padded, e_mask, d_mask) 
-                
+                # 1. Unpack (Data is ALREADY on GPU thanks to Accelerator)
+                src_padded, tgt_in_padded, tgt_out_padded = batch
+
+                # 2. Create Masks (Uses the device of src_padded)
+                e_mask, d_mask = self.create_mask(src_padded, tgt_in_padded)
+
+                # 3. Forward Pass
+                output = self.model(src_padded, tgt_in_padded, e_mask, d_mask)
+
+                # ... Loss calculation ...
                 output_flat = output.view(-1, self.trg_vocab_size)
                 target_flat = tgt_out_padded.view(-1)
-
                 loss = self.criterion(output_flat, target_flat)
 
-                # 7. BACKWARD PASS
-                # Replace loss.backward() with this:
+                # 4. Backward (Use Accelerator)
                 self.accelerator.backward(loss)
-                
-                # Clip gradients (using accelerator method)
-                if self.accelerator.sync_gradients:
-                    self.accelerator.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-                
                 self.optim.step()
                 self.optim.zero_grad()
 
@@ -337,17 +328,27 @@ class Manager():
             decoded_output = decoded_output[1:]
             
         return self.trg_sp.decode_ids(decoded_output)
-        
 
-    def make_mask(self, src_input, trg_input):
-        e_mask = (src_input != pad_id).unsqueeze(1)  # (B, 1, L)
-        d_mask = (trg_input != pad_id).unsqueeze(1)  # (B, 1, L)
+    def create_mask(self, src, tgt):
+        # src: (Batch, Src_Len)
+        # tgt: (Batch, Tgt_Len)
 
-        nopeak_mask = torch.ones([1, seq_len, seq_len], dtype=torch.bool)  # (1, L, L)
-        nopeak_mask = torch.tril(nopeak_mask).to(device)  # (1, L, L) to triangular shape
-        d_mask = d_mask & nopeak_mask  # (B, L, L) padding false
+        # 1. Source Padding Mask
+        # Use src.device as the anchor!
+        src_mask = (src != self.pad_id).unsqueeze(1).unsqueeze(2).to(src.device)
 
-        return e_mask, d_mask
+        # 2. Target Padding Mask
+        tgt_pad_mask = (tgt != self.pad_id).unsqueeze(1).unsqueeze(2).to(tgt.device)
+
+        # 3. Target No-Peak (Causal) Mask
+        tgt_len = tgt.size(1)
+        # Create on the same device as tgt
+        nopeak_mask = torch.tril(torch.ones((tgt_len, tgt_len), device=tgt.device)).bool()
+
+        # 4. Combine
+        tgt_mask = tgt_pad_mask & nopeak_mask.unsqueeze(0)
+
+        return src_mask, tgt_mask
 
 
 if __name__=='__main__':

@@ -10,8 +10,7 @@ from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 import torch
 
-def get_dataloader(dataset_name, src_sp, trg_sp, batch_size = batch_size, num_wokers = num_workers):
-    
+def get_dataloader(dataset_name, src_sp, trg_sp, batch_size = batch_size):
     print(f"Loading {dataset_name}...")
     dataset = load_dataset(dataset_name, split='train') 
 
@@ -72,22 +71,16 @@ def get_dataloader(dataset_name, src_sp, trg_sp, batch_size = batch_size, num_wo
 
     return dataloader
 
+
 def collate_fn(batch):
     src_batch = [b['src_ids'] for b in batch]
     tgt_in_batch = [b['tgt_input_ids'] for b in batch]
     tgt_out_batch = [b['tgt_labels'] for b in batch]
 
-    # Use 'pad_id' from your constants directly!
-    src_padded = pad_sequence([torch.tensor(x) for x in src_batch], batch_first=True, padding_value=pad_id)
-    tgt_in_padded = pad_sequence([torch.tensor(x) for x in tgt_in_batch], batch_first=True, padding_value=pad_id)
-    
-    # Labels use -100 so loss ignores padding (Standard PyTorch practice)
+    # Just Pad. Don't touch masks here.
+    # Note: Use your constants! pad_id=3
+    src_padded = pad_sequence([torch.tensor(x) for x in src_batch], batch_first=True, padding_value=3)
+    tgt_in_padded = pad_sequence([torch.tensor(x) for x in tgt_in_batch], batch_first=True, padding_value=3)
     tgt_out_padded = pad_sequence([torch.tensor(x) for x in tgt_out_batch], batch_first=True, padding_value=-100)
 
-    # Simple Mask Creation
-    # (B, 1, 1, SrcLen)
-    src_mask = (src_padded != pad_id).unsqueeze(1).unsqueeze(2)
-    # (B, 1, TgtLen, 1)
-    tgt_mask = (tgt_in_padded != pad_id).unsqueeze(1).unsqueeze(3)
-
-    return src_padded, tgt_in_padded, tgt_out_padded, src_mask, tgt_mask
+    return src_padded, tgt_in_padded, tgt_out_padded
