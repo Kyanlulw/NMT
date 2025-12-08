@@ -12,7 +12,7 @@ import torch
 
 def get_dataloader(dataset_name, src_sp, trg_sp, batch_size = batch_size):
     print(f"Loading {dataset_name}...")
-    dataset = load_dataset(dataset_name, split='train') 
+    dataset = load_dataset(dataset_name, split='train[:500000]')
 
     # --- TOKENIZER FUNCTION ---
     def tokenize_pair(examples):
