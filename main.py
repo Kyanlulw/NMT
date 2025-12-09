@@ -16,6 +16,8 @@ import datetime
 import copy
 import heapq
 import sentencepiece as spm
+import sacrebleu
+
 
 #Accelerate: thu vien cua huggingface dung` de train tren multiple gpus
 #Loss: CrossEntropyLoss
@@ -83,15 +85,22 @@ class Manager():
 
         # 3. CHECKPOINT LOADING
         if ckpt_name:
-            ckpt_path = f"{ckpt_dir}/{ckpt_name}"
+            if os.path.exists(ckpt_name):
+                ckpt_path = ckpt_name
+            else:
+                ckpt_path = os.path.join(ckpt_dir, ckpt_name)
+
+            # --- LOADING LOGIC ---
             if os.path.exists(ckpt_path):
-                # Map location is crucial for distributed loading
-                checkpoint = torch.load(ckpt_path, map_location='cpu') 
+                # Map location 'cpu' is safest to avoid GPU OOM on load
+                checkpoint = torch.load(ckpt_path, map_location='cpu')
+
                 self.model.load_state_dict(checkpoint['model_state_dict'])
                 self.optim.load_state_dict(checkpoint['optim_state_dict'])
                 self.best_loss = checkpoint.get('loss', sys.float_info.max)
+
                 if self.accelerator.is_main_process:
-                    print(f"Loaded checkpoint: {ckpt_name}")
+                    print(f"Loaded checkpoint from: {ckpt_path}")
         else:
             # CASE C: No checkpoint name provided -> Init from scratch
             if self.accelerator.is_main_process:
@@ -257,46 +266,111 @@ class Manager():
 
         return mean_valid_loss, time_str
 
-    def inference(self, input_sentence, method):
+    def inference(self, input_sentence, method='beam', verbose=True):
         self.model.eval()
-        
+
         # 1. Encode Input
         input_ids = self.src_sp.EncodeAsIds(input_sentence)
-        src_tensor = torch.LongTensor(input_ids).unsqueeze(0).to(self.device) # (1, L)
-        
+
+        # Safety Truncation (Avoids Positional Encoding Crash on huge inputs)
+        if len(input_ids) > 256:
+            input_ids = input_ids[:256]
+
+        src_tensor = torch.LongTensor(input_ids).unsqueeze(0).to(self.device)  # (1, L)
+
         # 2. Create Mask
         e_mask = (src_tensor != self.pad_id).unsqueeze(1).unsqueeze(2)
+
         start_time = datetime.datetime.now()
-        
-        print(f"Translating: '{input_sentence}'...")
+
+        if verbose:
+            print(f"Translating: '{input_sentence}'...")
 
         with torch.no_grad():
-            # --- CORRECTION HERE ---
             # 1. Embed
             src_emb = self.model.src_embedding(src_tensor)
-            
-            # 2. Add Position Info (CRITICAL!)
-            src_emb = self.model.positional_encoder(src_emb)
-            
-            # 3. Pass to Encoder
-            e_output = self.model.encoder(src_emb, e_mask) 
-            # -----------------------
 
+            # 2. Add Position Info
+            src_emb = self.model.positional_encoder(src_emb)
+
+            # 3. Pass to Encoder
+            e_output = self.model.encoder(src_emb, e_mask)
+
+            # 4. Decode
             if method == 'greedy':
                 result = self.greedy_search(e_output, e_mask)
             elif method == 'beam':
+                # Pass self.trg_sp to beam search if needed inside,
+                # or ensure beam_search accesses self.trg_sp
                 result = self.beam_search(e_output, e_mask)
 
         end_time = datetime.datetime.now()
 
-        total_inference_time = end_time - start_time
-        seconds = total_inference_time.seconds
-        minutes = seconds // 60
-        seconds = seconds % 60
+        if verbose:
+            total_inference_time = end_time - start_time
+            seconds = total_inference_time.seconds
+            minutes = seconds // 60
+            seconds = seconds % 60
+            print(f"Result: {result}")
+            print(f"Time: {minutes}m {seconds}s")
 
-        print(f"Input: {input_sentence}")
-        print(f"Result: {result}")
-        print(f"Inference finished! || Total inference time: {minutes}mins {seconds}secs")
+        # CRITICAL: You must return the string!
+        return result
+
+
+    # Add this inside your Manager class
+    def evaluate_bleu(self, test_loader, beam_size=3):
+        print(f"Starting BLEU evaluation with Beam Size {beam_size}...")
+        self.model.eval()
+
+        predictions = []
+        references = []
+
+        # 1. Disable Gradients to save memory
+        with torch.no_grad():
+            # We iterate one by one (or batch if beam search supports it)
+            # Since beam search is single-sample, we loop.
+            for i, batch in tqdm(enumerate(test_loader), desc="Translating", total=len(test_loader)):
+
+                # Unpack - we only need source for inference
+                src_padded, tgt_in_padded, tgt_out_padded = batch
+
+                # We iterate through the batch (because beam_search handles 1 item at a time)
+                # Note: This is slow but simple. Optimized beam search does batching.
+                for j in range(src_padded.size(0)):
+
+                    src_ids = src_padded[j].tolist()
+                    # Filter out pad_id
+                    src_ids = [x for x in src_ids if x != self.pad_id and x != self.eos_id]
+
+
+                    src_text = self.src_sp.DecodeIds(src_ids)
+
+                    ref_ids = tgt_out_padded[j].tolist()
+                    ref_ids = [x for x in ref_ids if x != -100 and x != self.pad_id and x != self.eos_id]
+                    ref_text = self.trg_sp.DecodeIds(ref_ids)
+
+
+
+                    # Note: We need to ensure inference() returns the STRING, not print it.
+                    pred_text = self.inference(src_text, method='beam', verbose=False)
+                    predictions.append(pred_text)
+                    references.append(ref_text)
+
+                    if i < 3 and j == 0:
+                        print(f"\nSrc: {src_text}")
+                        print(f"Ref: {ref_text}")
+                        print(f"Pred: {pred_text}")
+
+        # 3. Calculate BLEU
+        # SacreBLEU expects references as a list of lists (for multiple refs per sentence)
+        bleu = sacrebleu.corpus_bleu(predictions, [references])
+
+        print(f"\n---------------------------------")
+        print(f"BLEU Score: {bleu.score}")
+        print(f"---------------------------------")
+
+        return bleu.score
         
     def greedy_search(self, e_output, e_mask):
         last_words = torch.LongTensor([pad_id] * seq_len).to(device) # (L)
@@ -503,6 +577,20 @@ if __name__=='__main__':
        
         manager = Manager(is_train=False, ckpt_name=args.ckpt_name)
         manager.inference(args.input, args.decode)
+    elif args.mode == 'evaluate':
+        # Load the best checkpoint
+        assert args.ckpt is not None, "Provide a checkpoint!"
+        manager = Manager(is_train=False, ckpt_name=args.ckpt)
+
+        # We need a loader. Let's use validation or a dedicated test set
+        test_loader = get_dataloader(
+            dataset_name=DATASET_NAME,
+            src_sp=manager.src_sp,
+            trg_sp=manager.trg_sp,
+            split='test'  # Or 'validation' if test doesn't exist
+        )
+
+        manager.evaluate_bleu(test_loader, beam_size=3)
 
     else:
         print("Please specify mode argument either with 'train' or 'inference'.")
