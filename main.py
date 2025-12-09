@@ -17,6 +17,20 @@ import copy
 import heapq
 import sentencepiece as spm
 
+#Accelerate: thu vien cua huggingface dung` de train tren multiple gpus
+#Loss: CrossEntropyLoss
+#Optimizer: Adam
+#500000 pair of data
+#epoch: 5
+#global_step: train tren bao nhieu buoc
+#best: bao nhieu loss
+#Bleu: t gui sau
+#Thuat toan de inference: BeamSearch, GreedySearch
+#Mo hinh: Dung transformer
+#Preprocess: Dung sentencepiece de tao vocab
+#Ablation study: RMSnorm, RoPE
+#Preprocess: Unigram; Vocab-size: 32000
+#Training phase: 2xT4 GPU + Thoi gian train/epoch
 class Manager():    
     def __init__(self, is_train=True, ckpt_name=None):
         

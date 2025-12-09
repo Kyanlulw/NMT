@@ -64,6 +64,7 @@ def get_dataloader(dataset_name, src_sp, trg_sp, batch_size = batch_size, split 
     )
     tokenized_dataset.set_format(type=None, columns=['src_ids', 'tgt_input_ids', 'tgt_labels'])
 
+    #Notice: collate_fn tien xu ly tensor khi dua vao mo hinh
     # --- LOADER ---
     dataloader = DataLoader(
         tokenized_dataset, 
@@ -73,6 +74,7 @@ def get_dataloader(dataset_name, src_sp, trg_sp, batch_size = batch_size, split 
         num_workers = num_workers,
         pin_memory=True
     )
+
 
     return dataloader
 

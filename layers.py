@@ -4,7 +4,7 @@ import torch.nn as nn
 from constants import *
 import math
 
-
+#5th
 class EncoderLayer(nn.Module):
     def __init__(self):
         super().__init__()
@@ -24,7 +24,7 @@ class EncoderLayer(nn.Module):
 
         return x # (B, seq_len, d_model)
 
-
+#6th
 class DecoderLayer(nn.Module):
     def __init__(self):
         super().__init__()
@@ -52,7 +52,7 @@ class DecoderLayer(nn.Module):
 
         return x # (B, seq_len, d_model)
 
-
+#4th
 class MultiHeadAttentionLayer(nn.Module):
     def __init__(self):
         super().__init__()
@@ -117,7 +117,7 @@ class MultiHeadAttentionLayer(nn.Module):
         attn_output = torch.matmul(attn_distribs, v)
         return attn_output
 
-
+#3rd
 class FeedForwardLayer(nn.Module):
     def __init__(self):
         super().__init__()
@@ -133,6 +133,7 @@ class FeedForwardLayer(nn.Module):
 
         return x
 
+#2nd
 class LayerNormalization(nn.Module):
     def __init__ (self, eps = 1e-6):
         super().__init__()
@@ -143,6 +144,7 @@ class LayerNormalization(nn.Module):
         x = self.layer(x)
         return x
 
+#1st
 class PositionalEncoder(nn.Module):
     def __init__(self, d_model = d_model, max_len = 5000):
         # Pass d_model and max_len as args, don't rely on globals!
