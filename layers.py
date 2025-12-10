@@ -9,7 +9,7 @@ class EncoderLayer(nn.Module):
     def __init__(self):
         super().__init__()
         self.layernorm1 = LayerNormalization()
-        self.mha = MultiHeadAttentionLayer()
+        self.mha = MultiHeadAttentionLayer(use_rope=True)
         self.dropout1 = nn.Dropout(drop_out_rate)
 
         self.layernorm2 = LayerNormalization()
@@ -29,11 +29,11 @@ class DecoderLayer(nn.Module):
     def __init__(self):
         super().__init__()
         self.layernorm1 = LayerNormalization()
-        self.self_maksed_mha = MultiHeadAttentionLayer()
+        self.self_maksed_mha = MultiHeadAttentionLayer(use_rope=True)
         self.dropout1 = nn.Dropout(drop_out_rate)
 
         self.layernorm2 = LayerNormalization()
-        self.mha = MultiHeadAttentionLayer()
+        self.mha = MultiHeadAttentionLayer(use_rope=False)
         self.dropout2 = nn.Dropout(drop_out_rate)
 
         self.layernorm3 = LayerNormalization()
@@ -54,7 +54,7 @@ class DecoderLayer(nn.Module):
 
 #4th
 class MultiHeadAttentionLayer(nn.Module):
-    def __init__(self):
+    def __init__(self, use_rope = True):
         super().__init__()
         self.inf = 1e9
 
@@ -63,7 +63,11 @@ class MultiHeadAttentionLayer(nn.Module):
         self.w_k = nn.Linear(d_model, d_model, bias=False)
         self.w_v = nn.Linear(d_model, d_model, bias=False)
 
-        self.rotary_emb = RotaryEmbedding(d_k)
+        self.use_rope = use_rope
+        if self.use_rope:
+            self.rotary_emb = RotaryEmbedding(d_k)
+        else:
+            self.rotary_emb = None
 
         self.attn_softmax = nn.Softmax(dim=-1)
         self.attn_dropout = nn.Dropout(drop_out_rate)
@@ -72,7 +76,7 @@ class MultiHeadAttentionLayer(nn.Module):
         self.w_o = nn.Linear(d_model, d_model, bias=False)
 
     def forward(self, q, k, v, mask=None):
-        # 1. Define Shapes
+        #Define Shapes
         batch_sizee = q.size(0)
 
         # Use -1 to infer sequence length dynamically (safe for cross-attention)
@@ -81,23 +85,21 @@ class MultiHeadAttentionLayer(nn.Module):
         k = self.w_k(k).view(batch_sizee, -1, num_heads, d_k)
         v = self.w_v(v).view(batch_sizee, -1, num_heads, d_k)
 
-        # 2. Transpose for Attention: (B, H, Seq_Len, d_k)
+        #Transpose for Attention: (B, H, Seq_Len, d_k)
         q = q.transpose(1, 2)
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
 
-        seq_length = q.size(2)
-        # Get Cos/Sin for the current sequence length
-        cos, sin = self.rotary_emb(v, seq_len=seq_length)
+        if self.use_rope:
+            seq_length = q.size(2)
+            # Get Cos/Sin for the current sequence length
+            cos, sin = self.rotary_emb(v, seq_len=seq_length)
+            # Apply rotation to Q and K
+            q, k = apply_rotary_pos_emb(q, k, cos, sin)
 
-        # Apply rotation to Q and K
-        q, k = apply_rotary_pos_emb(q, k, cos, sin)
-
-        # 3. Pass the mask correctly! (FIXED HERE)
         attn_output = self.self_attention(q, k, v, mask=mask)
 
-        # 4. Concatenate and Project
-        # (B, H, Len, d_k) -> (B, Len, H, d_k) -> (B, Len, d_model)
+
         concat_output = attn_output.transpose(1, 2).contiguous().view(batch_sizee, -1, d_model)
 
         output = self.w_o(concat_output)
