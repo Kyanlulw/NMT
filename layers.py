@@ -9,7 +9,7 @@ class EncoderLayer(nn.Module):
     def __init__(self):
         super().__init__()
         self.layernorm1 = LayerNormalization()
-        self.mha = MultiHeadAttentionLayer(use_rope=True)
+        self.mha = MultiHeadAttentionLayer(use_rope=False)
         self.dropout1 = nn.Dropout(drop_out_rate)
 
         self.layernorm2 = LayerNormalization()
@@ -29,7 +29,7 @@ class DecoderLayer(nn.Module):
     def __init__(self):
         super().__init__()
         self.layernorm1 = LayerNormalization()
-        self.self_maksed_mha = MultiHeadAttentionLayer(use_rope=True)
+        self.self_maksed_mha = MultiHeadAttentionLayer(use_rope=False)
         self.dropout1 = nn.Dropout(drop_out_rate)
 
         self.layernorm2 = LayerNormalization()
@@ -209,43 +209,43 @@ def apply_rotary_pos_emb(q, k, cos, sin):
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
-# class PositionalEncoder(nn.Module):
-#     def __init__(self, d_model = d_model, max_len = 5000):
-#         # Pass d_model and max_len as args, don't rely on globals!
-#         super().__init__()
-#
-#         # 1. Create Matrix (on CPU initially)
-#         pe = torch.zeros(max_len, d_model)
-#
-#         # 2. Vectorized Calculation (Fast!)
-#         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-#         # Calculate the division term in log space for numerical stability
-#         div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
-#
-#         # Apply Sine to even indices
-#         pe[:, 0::2] = torch.sin(position * div_term)
-#         # Apply Cosine to odd indices
-#         pe[:, 1::2] = torch.cos(position * div_term)
-#
-#         # Add batch dimension: (1, max_len, d_model)
-#         pe = pe.unsqueeze(0)
-#
-#         # 3. THE MAGIC LINE
-#         # We register it as a "buffer".
-#         # - It is NOT a parameter (won't be updated by optimizer).
-#         # - It WILL be moved to GPU automatically by Accelerator.
-#         # - It WILL be saved in state_dict.
-#         self.register_buffer('pe', pe)
-#
-#     def forward(self, x):
-#         # x shape: (Batch_Size, Seq_Len, d_model)
-#
-#         # Scale embedding (Standard Transformer practice)
-#         x = x * math.sqrt(x.size(-1))
-#
-#         # Add PE
-#         # We slice self.pe to the length of the current input x
-#         # self.pe is already on the correct device!
-#         x = x + self.pe[:, :x.size(1), :]
-#
-#         return x
+class PositionalEncoder(nn.Module):
+    def __init__(self, d_model = d_model, max_len = 5000):
+        # Pass d_model and max_len as args, don't rely on globals!
+        super().__init__()
+
+        # 1. Create Matrix (on CPU initially)
+        pe = torch.zeros(max_len, d_model)
+
+        # 2. Vectorized Calculation (Fast!)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        # Calculate the division term in log space for numerical stability
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+
+        # Apply Sine to even indices
+        pe[:, 0::2] = torch.sin(position * div_term)
+        # Apply Cosine to odd indices
+        pe[:, 1::2] = torch.cos(position * div_term)
+
+        # Add batch dimension: (1, max_len, d_model)
+        pe = pe.unsqueeze(0)
+
+        # 3. THE MAGIC LINE
+        # We register it as a "buffer".
+        # - It is NOT a parameter (won't be updated by optimizer).
+        # - It WILL be moved to GPU automatically by Accelerator.
+        # - It WILL be saved in state_dict.
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        # x shape: (Batch_Size, Seq_Len, d_model)
+
+        # Scale embedding (Standard Transformer practice)
+        x = x * math.sqrt(x.size(-1))
+
+        # Add PE
+        # We slice self.pe to the length of the current input x
+        # self.pe is already on the correct device!
+        x = x + self.pe[:, :x.size(1), :]
+
+        return x
