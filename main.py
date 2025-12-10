@@ -6,6 +6,7 @@ from data_structure import *
 from torch import nn
 from accelerate import Accelerator
 from custom_data import get_dataloader
+from transformers import get_scheduler
 
 import wandb
 import torch
@@ -80,7 +81,13 @@ class Manager():
         )
         # Note: No need for .to(device) here. Accelerator handles it in .prepare()
 
-        self.optim = torch.optim.Adam(self.model.parameters(), lr = learning_rate)
+        self.optim = torch.optim.AdamW(
+            self.model.parameters(),
+            lr=learning_rate,
+            betas=(0.9, 0.98),  # Adjusted for NMT stability
+            eps=1e-9,  # Prevents division by zero errors
+            weight_decay=0.01  # Regularization (Prevents overfitting)
+        )
         self.best_loss = sys.float_info.max
 
         # 3. CHECKPOINT LOADING
@@ -120,12 +127,22 @@ class Manager():
             # Get the standard PyTorch dataloader
             train_loader = get_dataloader(self.dataset_name, self.src_sp, self.trg_sp, split = 'train[:500000]')
             valid_loader = get_dataloader(self.dataset_name, self.src_sp, self.trg_sp, split = 'validation')
-            
+
+            num_update_steps_per_epoch = len(train_loader)
+            max_train_steps = num_epochs * num_update_steps_per_epoch
+
+            # Create the Scheduler
+            self.lr_scheduler = get_scheduler(
+                name="cosine",  # "cosine" decay is generally SOTA for NMT
+                optimizer=self.optim,
+                num_warmup_steps=4000,  # Warmup for the first 4000 steps
+                num_training_steps=max_train_steps
+            )
             # 5. THE MAGIC LINE: ACCELERATOR.PREPARE
             # This wraps the model in DDP, moves it to GPU, and 
             # splits the dataloader across GPUs automatically.
-            self.model, self.optim, self.train_loader, self.valid_loader = self.accelerator.prepare(
-                self.model, self.optim, train_loader, valid_loader
+            self.model, self.optim, self.train_loader, self.valid_loader, self.lr_scheduler = self.accelerator.prepare(
+                self.model, self.optim, train_loader, valid_loader, self.lr_scheduler
             )
 
     def train(self):
@@ -159,6 +176,7 @@ class Manager():
                 # --- BACKWARD PASS ---
                 self.accelerator.backward(loss)
                 self.optim.step()
+                self.lr_scheduler.step()
                 self.optim.zero_grad()
 
                 # --- LOGGING ---

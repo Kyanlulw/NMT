@@ -63,6 +63,8 @@ class MultiHeadAttentionLayer(nn.Module):
         self.w_k = nn.Linear(d_model, d_model, bias=False)
         self.w_v = nn.Linear(d_model, d_model, bias=False)
 
+        self.rotary_emb = RotaryEmbedding(d_k)
+
         self.attn_softmax = nn.Softmax(dim=-1)
         self.attn_dropout = nn.Dropout(drop_out_rate)
 
@@ -71,25 +73,32 @@ class MultiHeadAttentionLayer(nn.Module):
 
     def forward(self, q, k, v, mask=None):
         # 1. Define Shapes
-        batch_size = q.size(0)
+        batch_sizee = q.size(0)
 
         # Use -1 to infer sequence length dynamically (safe for cross-attention)
         # Reshape: (B, Seq_Len, d_model) -> (B, Seq_Len, H, d_k)
-        q = self.w_q(q).view(batch_size, -1, num_heads, d_k)
-        k = self.w_k(k).view(batch_size, -1, num_heads, d_k)
-        v = self.w_v(v).view(batch_size, -1, num_heads, d_k)
+        q = self.w_q(q).view(batch_sizee, -1, num_heads, d_k)
+        k = self.w_k(k).view(batch_sizee, -1, num_heads, d_k)
+        v = self.w_v(v).view(batch_sizee, -1, num_heads, d_k)
 
         # 2. Transpose for Attention: (B, H, Seq_Len, d_k)
         q = q.transpose(1, 2)
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
 
+        seq_length = q.size(2)
+        # Get Cos/Sin for the current sequence length
+        cos, sin = self.rotary_emb(v, seq_len=seq_length)
+
+        # Apply rotation to Q and K
+        q, k = apply_rotary_pos_emb(q, k, cos, sin)
+
         # 3. Pass the mask correctly! (FIXED HERE)
         attn_output = self.self_attention(q, k, v, mask=mask)
 
         # 4. Concatenate and Project
         # (B, H, Len, d_k) -> (B, Len, H, d_k) -> (B, Len, d_model)
-        concat_output = attn_output.transpose(1, 2).contiguous().view(batch_size, -1, d_model)
+        concat_output = attn_output.transpose(1, 2).contiguous().view(batch_sizee, -1, d_model)
 
         output = self.w_o(concat_output)
         return output
@@ -145,43 +154,96 @@ class LayerNormalization(nn.Module):
         return x
 
 #1st
-class PositionalEncoder(nn.Module):
-    def __init__(self, d_model = d_model, max_len = 5000):
-        # Pass d_model and max_len as args, don't rely on globals!
+class RotaryEmbedding(nn.Module):
+    def __init__(self, dim, max_seq_len=5000):
         super().__init__()
+        self.dim = dim
 
-        # 1. Create Matrix (on CPU initially)
-        pe = torch.zeros(max_len, d_model)
+        # 1. Calculate Frequencies (The "Theta")
+        # formula: 1 / (10000 ^ (2i / dim))
+        inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2).float() / dim))
 
-        # 2. Vectorized Calculation (Fast!)
-        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        # Calculate the division term in log space for numerical stability
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        # 2. Create Position indices
+        t = torch.arange(max_seq_len).type_as(inv_freq)
 
-        # Apply Sine to even indices
-        pe[:, 0::2] = torch.sin(position * div_term)
-        # Apply Cosine to odd indices
-        pe[:, 1::2] = torch.cos(position * div_term)
+        # 3. Outer Product to get angles
+        freqs = torch.einsum('i,j->ij', t, inv_freq)  # (seq_len, dim/2)
 
-        # Add batch dimension: (1, max_len, d_model)
-        pe = pe.unsqueeze(0)
+        # 4. Concatenate to match dimension
+        # (seq_len, dim)
+        emb = torch.cat((freqs, freqs), dim=-1)
 
-        # 3. THE MAGIC LINE
-        # We register it as a "buffer".
-        # - It is NOT a parameter (won't be updated by optimizer).
-        # - It WILL be moved to GPU automatically by Accelerator.
-        # - It WILL be saved in state_dict.
-        self.register_buffer('pe', pe)
+        # 5. REGISTER BUFFER (Crucial for Accelerate/Multi-GPU)
+        # We register cos and sin as buffers so they move to GPU automatically
+        self.register_buffer('cos_cached', emb.cos()[None, None, :, :])
+        self.register_buffer('sin_cached', emb.sin()[None, None, :, :])
 
-    def forward(self, x):
-        # x shape: (Batch_Size, Seq_Len, d_model)
+    def forward(self, x, seq_len=None):
+        # x shape: (Batch, Heads, Seq_Len, Head_Dim)
+        if seq_len > self.cos_cached.shape[2]:
+            # Optional: Resize cache if input is longer than max_seq_len
+            # For now, we assume max_seq_len is big enough (5000)
+            pass
 
-        # Scale embedding (Standard Transformer practice)
-        x = x * math.sqrt(x.size(-1))
+        return (
+            self.cos_cached[:, :, :seq_len, ...],
+            self.sin_cached[:, :, :seq_len, ...]
+        )
 
-        # Add PE
-        # We slice self.pe to the length of the current input x
-        # self.pe is already on the correct device!
-        x = x + self.pe[:, :x.size(1), :]
+# Helper function to rotate vector
+def rotate_half(x):
+    # Split vector in half
+    x1, x2 = x.chunk(2, dim=-1)
+    # Return [-x2, x1]
+    return torch.cat((-x2, x1), dim=-1)
 
-        return x
+
+def apply_rotary_pos_emb(q, k, cos, sin):
+    # q, k: (Batch, Heads, Seq_Len, Head_Dim)
+    # cos, sin: (1, 1, Seq_Len, Head_Dim)
+
+    # Formula: (x * cos) + (rotate_half(x) * sin)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+# class PositionalEncoder(nn.Module):
+#     def __init__(self, d_model = d_model, max_len = 5000):
+#         # Pass d_model and max_len as args, don't rely on globals!
+#         super().__init__()
+#
+#         # 1. Create Matrix (on CPU initially)
+#         pe = torch.zeros(max_len, d_model)
+#
+#         # 2. Vectorized Calculation (Fast!)
+#         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+#         # Calculate the division term in log space for numerical stability
+#         div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+#
+#         # Apply Sine to even indices
+#         pe[:, 0::2] = torch.sin(position * div_term)
+#         # Apply Cosine to odd indices
+#         pe[:, 1::2] = torch.cos(position * div_term)
+#
+#         # Add batch dimension: (1, max_len, d_model)
+#         pe = pe.unsqueeze(0)
+#
+#         # 3. THE MAGIC LINE
+#         # We register it as a "buffer".
+#         # - It is NOT a parameter (won't be updated by optimizer).
+#         # - It WILL be moved to GPU automatically by Accelerator.
+#         # - It WILL be saved in state_dict.
+#         self.register_buffer('pe', pe)
+#
+#     def forward(self, x):
+#         # x shape: (Batch_Size, Seq_Len, d_model)
+#
+#         # Scale embedding (Standard Transformer practice)
+#         x = x * math.sqrt(x.size(-1))
+#
+#         # Add PE
+#         # We slice self.pe to the length of the current input x
+#         # self.pe is already on the correct device!
+#         x = x + self.pe[:, :x.size(1), :]
+#
+#         return x
