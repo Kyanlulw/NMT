@@ -151,13 +151,13 @@ class Manager():
         if self.accelerator.is_main_process:
             print("Training starts.")
 
-        num_epochs = self.config.get('epochs', 10)
+        my_num_epochs = num_epochs
 
         # 1. Initialize Global Step
         global_step = 0
         VALIDATION_FREQ = eval_step  # Validate every 500 steps
 
-        for epoch in range(1, num_epochs + 1):
+        for epoch in range(1, my_num_epochs + 1):
             self.model.train()
             train_losses = []
 
@@ -288,7 +288,7 @@ class Manager():
 
     def inference(self, input_sentence, method='beam', verbose=False):
         self.model.eval()
-        my_device = next(self.model.parameters()).device
+        my_device = self.device
         # 1. Encode Input
         input_ids = self.src_sp.EncodeAsIds(input_sentence)
 
@@ -380,9 +380,11 @@ class Manager():
                     references.append(ref_text)
 
                     if i < 3 and j == 0:
-                        print(f"\nSrc: {src_text}")
-                        print(f"Ref: {ref_text}")
-                        print(f"Pred: {pred_text}")
+                        if self.accelerator.is_main_process:
+                            print(f"\nSrc: {src_text}")
+                            print(f"Ref: {ref_text}")
+                            print(f"Pred: {pred_text}")
+
 
         # 3. Calculate BLEU
         # SacreBLEU expects references as a list of lists (for multiple refs per sentence)
@@ -615,7 +617,8 @@ if __name__=='__main__':
             dataset_name=DATASET_NAME,
             src_sp=manager.src_sp,
             trg_sp=manager.trg_sp,
-            split='test'  # Or 'validation' if test doesn't exist
+            split='test',  # Or 'validation' if test doesn't exist
+            workers = 0
         )
 
         manager.evaluate_bleu(test_loader, beam_size=4)
