@@ -286,7 +286,7 @@ class Manager():
 
         return mean_valid_loss, time_str
 
-    def inference(self, input_sentence, method='beam', verbose=True):
+    def inference(self, input_sentence, method='beam', verbose=False):
         self.model.eval()
         my_device = next(self.model.parameters()).device
         # 1. Encode Input
