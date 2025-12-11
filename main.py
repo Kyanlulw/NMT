@@ -549,7 +549,7 @@ class Manager():
             # This keeps the tensor shape valid for the next model run
             while len(new_seqs) < beam_size:
                 new_seqs.append(new_seqs[0])  # Duplicate the best one (it won't matter, it effectively forks)
-                new_scores.append(-1e9)  # Give it bad score so it dies next round
+                new_scores.append(torch.tensor(-1e9, device = my_device))  # Give it bad score so it dies next round
 
             # Stack back into tensors
             cur_seq = torch.stack(new_seqs)  # (Beam, Len)
