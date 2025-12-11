@@ -479,7 +479,7 @@ class Manager():
 
             # Standard mask creation (Vectorized)
             trg_len = trg_input.size(1)
-            d_pad_mask = (trg_input != self.pad_id).unsqueeze(1)
+            d_pad_mask = (trg_input != self.pad_id).unsqueeze(1).unsqueeze(2)
             nopeak_mask = torch.tril(torch.ones((trg_len, trg_len), device=my_device)).bool()
             d_mask = d_pad_mask & nopeak_mask.unsqueeze(0)
 
@@ -630,7 +630,7 @@ if __name__=='__main__':
             trg_sp=manager.trg_sp,
             split='test',  # Or 'validation' if test doesn't exist
             workers = 0,
-            batch_size = 1
+            my_batch_size = 1
         )
 
         manager.evaluate_bleu(test_loader, beam_size=beam_size)

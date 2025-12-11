@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 import torch
 
-def get_dataloader(dataset_name, src_sp, trg_sp, batch_size = batch_size, split = '', workers = num_workers):
+def get_dataloader(dataset_name, src_sp, trg_sp, my_batch_size = batch_size, split = '', workers = num_workers):
     print(f"Loading {dataset_name}...")
     dataset = load_dataset(dataset_name, split=split)
 
@@ -68,7 +68,7 @@ def get_dataloader(dataset_name, src_sp, trg_sp, batch_size = batch_size, split 
     # --- LOADER ---
     dataloader = DataLoader(
         tokenized_dataset, 
-        batch_size=batch_size, 
+        batch_size=my_batch_size,
         shuffle=True, 
         collate_fn=collate_fn, 
         num_workers = workers,
