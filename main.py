@@ -606,7 +606,7 @@ if __name__=='__main__':
     parser.add_argument('--input', type=str, required=False, help="input sentence when inferencing")
     parser.add_argument('--decode', type=str, required=True, default="greedy", help="greedy or beam?")
     parser.add_argument('--dataset_name', type=str, required=False, help="path to config file")
-    parser.add_argument('--use_rope', type=str, default = USE_ROPE, required=False, help="use rope or pe")
+    parser.add_argument('--use_rope', type=bool, default = USE_ROPE, required=False, help="use rope or pe")
     args = parser.parse_args()
     constants.USE_ROPE = args.use_rope
 
