@@ -1,4 +1,6 @@
 from tqdm import tqdm
+
+import constants
 from constants import *
 from custom_data import *
 from transformer import *
@@ -35,7 +37,7 @@ import sacrebleu
 #Preprocess: Unigram; Vocab-size: 32000
 #Training phase: 2xT4 GPU + Thoi gian train/epoch
 class Manager():    
-    def __init__(self, is_train=True, ckpt_name=None):
+    def __init__(self, is_train=True, ckpt_name=None, use_rope = USE_ROPE):
         
         # 1. INITIALIZE ACCELERATOR
         # This automatically detects if you have 1 GPU, 4 GPUs, or TPUs.
@@ -45,6 +47,7 @@ class Manager():
             log_with="wandb"  # <--- NEW
         )
 
+        self.use_rope = use_rope
         self.max_len = max_len
         self.config = {
             'lr' : learning_rate,
@@ -313,8 +316,8 @@ class Manager():
             # 1. Embed
             src_emb = self.model.src_embedding(src_tensor)
 
-            # 2. Add Position Info
-            # src_emb = self.model.positional_encoder(src_emb)
+            if not self.use_rope:
+                src_emb = self.model.positional_encoder(src_emb)
 
             # 3. Pass to Encoder
             e_output = self.model.encoder(src_emb, e_mask)
@@ -488,6 +491,8 @@ class Manager():
             # For now, we assume standard full-forward pass.
             with torch.amp.autocast('cuda', enabled=True):  # Enable FP16 for speed
                 trg_emb = model_engine.trg_embedding(trg_input)
+                if self.use_rope == False:
+                    trg_emb = model_engine.positional_encoder(trg_emb)
                 decoder_output = model_engine.decoder(trg_emb, e_output, e_mask, d_mask)
                 logits = model_engine.output_linear(decoder_output[:, -1, :])
                 log_probs = torch.log_softmax(logits, dim=-1)  # (Beam, Vocab)
@@ -601,12 +606,13 @@ if __name__=='__main__':
     parser.add_argument('--input', type=str, required=False, help="input sentence when inferencing")
     parser.add_argument('--decode', type=str, required=True, default="greedy", help="greedy or beam?")
     parser.add_argument('--dataset_name', type=str, required=False, help="path to config file")
-
+    parser.add_argument('--use_rope', type=str, default = USE_ROPE, required=False, help="use rope or pe")
     args = parser.parse_args()
+    constants.USE_ROPE = args.use_rope
 
     if args.mode == 'train':
         if args.ckpt_name is not None:
-            manager = Manager(is_train=True, ckpt_name=args.ckpt_name)
+            manager = Manager(is_train=True, ckpt_name=args.ckpt_name, use_rope=args.use_rope)
         else:
             manager = Manager(is_train=True)
 
@@ -616,12 +622,12 @@ if __name__=='__main__':
         assert args.input is not None, "Please specify the input sentence to translate."
         assert args.decode == 'greedy' or args.decode =='beam', "Please specify correct decoding method, either 'greedy' or 'beam'."
        
-        manager = Manager(is_train=False, ckpt_name=args.ckpt_name)
+        manager = Manager(is_train=False, ckpt_name=args.ckpt_name, use_rope=args.use_rope)
         manager.inference(args.input, args.decode)
     elif args.mode == 'evaluate':
         # Load the best checkpoint
         assert args.ckpt_name is not None, "Provide a checkpoint!"
-        manager = Manager(is_train=False, ckpt_name=args.ckpt_name)
+        manager = Manager(is_train=False, ckpt_name=args.ckpt_name, use_rope=args.use_rope)
 
         # We need a loader. Let's use validation or a dedicated test set
         test_loader = get_dataloader(
