@@ -30,11 +30,11 @@ class DecoderLayer(nn.Module):
     def __init__(self):
         super().__init__()
         self.layernorm1 = LayerNormalization()
-        self.self_maksed_mha = MultiHeadAttentionLayer(use_rope=False)
+        self.self_maksed_mha = MultiHeadAttentionLayer()
         self.dropout1 = nn.Dropout(drop_out_rate)
 
         self.layernorm2 = LayerNormalization()
-        self.mha = MultiHeadAttentionLayer()
+        self.mha = MultiHeadAttentionLayer(use_rope=False)
         self.dropout2 = nn.Dropout(drop_out_rate)
 
         self.layernorm3 = LayerNormalization()
