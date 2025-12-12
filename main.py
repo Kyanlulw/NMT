@@ -608,7 +608,6 @@ if __name__=='__main__':
     parser.add_argument('--dataset_name', type=str, required=False, help="path to config file")
     parser.add_argument('--use_rope', type=bool, default = USE_ROPE, required=False, help="use rope or pe")
     args = parser.parse_args()
-    constants.USE_ROPE = args.use_rope
 
     if args.mode == 'train':
         if args.ckpt_name is not None:
@@ -643,3 +642,4 @@ if __name__=='__main__':
 
     else:
         print("Please specify mode argument either with 'train' or 'inference'.")
+    constants.USE_ROPE = args.use_rope
