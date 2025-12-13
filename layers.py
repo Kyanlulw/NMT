@@ -203,11 +203,15 @@ def rotate_half(x):
 def apply_rotary_pos_emb(q, k, cos, sin):
     # q, k: (Batch, Heads, Seq_Len, Head_Dim)
     # cos, sin: (1, 1, Seq_Len, Head_Dim)
+    q_float = q.float()
+    k_float = k.float()
+    cos = cos.float()
+    sin = sin.float()
 
     # Formula: (x * cos) + (rotate_half(x) * sin)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
+    q_embed = (q_float * cos) + (rotate_half(q_float) * sin)
+    k_embed = (k_float * cos) + (rotate_half(k_float) * sin)
+    return q_embed.type_as(q), k_embed.type_as(k)
 
 class PositionalEncoder(nn.Module):
     def __init__(self, d_model = d_model, max_len = 5000):
