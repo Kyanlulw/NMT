@@ -1,4 +1,6 @@
 from tqdm import tqdm
+
+import constants
 from constants import *
 from custom_data import *
 from transformer import *
@@ -103,8 +105,8 @@ class Manager():
             if os.path.exists(ckpt_path):
                 # Map location 'cpu' is safest to avoid GPU OOM on load
                 checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only = False)
-
-                self.model.load_state_dict(checkpoint['model_state_dict'])
+                #fuck
+                self.model.load_state_dict(checkpoint['model_state_dict'], strict = True)
                 self.optim.load_state_dict(checkpoint['optim_state_dict'])
                 self.best_loss = checkpoint.get('loss', sys.float_info.max)
 
@@ -127,11 +129,11 @@ class Manager():
             self.criterion = nn.CrossEntropyLoss(ignore_index=-100)
             
             # Get the standard PyTorch dataloader
-            train_loader = get_dataloader(self.dataset_name, self.src_sp, self.trg_sp, split = 'train[:500000]')
-            valid_loader = get_dataloader(self.dataset_name, self.src_sp, self.trg_sp, split = 'validation')
+            train_loader = get_dataloader(self.dataset_name, self.src_sp, self.trg_sp, split = 'train[:100]')
+            valid_loader = get_dataloader(self.dataset_name, self.src_sp, self.trg_sp, split = 'validation[:20]')
 
             num_update_steps_per_epoch = len(train_loader)
-            max_train_steps = num_epochs * num_update_steps_per_epoch
+            max_train_steps = int(constants.num_epochs) * num_update_steps_per_epoch
 
             # Create the Scheduler
             self.lr_scheduler = get_scheduler(
@@ -151,7 +153,7 @@ class Manager():
         if self.accelerator.is_main_process:
             print("Training starts.")
 
-        my_num_epochs = num_epochs
+        my_num_epochs = constants.num_epochs
 
         # 1. Initialize Global Step
         global_step = 0
@@ -300,7 +302,7 @@ class Manager():
         src_tensor = torch.LongTensor(input_ids).unsqueeze(0).to(my_device)  # (1, L)
 
         # 2. Create Mask
-        e_mask = (src_tensor != self.pad_id).unsqueeze(1).unsqueeze(2)
+        e_mask = (src_tensor != pad_id).unsqueeze(1).unsqueeze(2)
 
         if self.device.type == 'cuda':
             torch.cuda.synchronize()
@@ -313,8 +315,8 @@ class Manager():
             # 1. Embed
             src_emb = self.model.src_embedding(src_tensor)
 
-            # 2. Add Position Info
-            # src_emb = self.model.positional_encoder(src_emb)
+
+            # src_emb = self.model.positional_encoding(src_emb)
 
             # 3. Pass to Encoder
             e_output = self.model.encoder(src_emb, e_mask)
@@ -488,6 +490,9 @@ class Manager():
             # For now, we assume standard full-forward pass.
             with torch.amp.autocast('cuda', enabled=True):  # Enable FP16 for speed
                 trg_emb = model_engine.trg_embedding(trg_input)
+
+                trg_emb = trg_emb * math.sqrt(d_model)
+                # trg_emb = model_engine.positional_encoding(trg_emb)
                 decoder_output = model_engine.decoder(trg_emb, e_output, e_mask, d_mask)
                 logits = model_engine.output_linear(decoder_output[:, -1, :])
                 log_probs = torch.log_softmax(logits, dim=-1)  # (Beam, Vocab)
@@ -601,8 +606,14 @@ if __name__=='__main__':
     parser.add_argument('--input', type=str, required=False, help="input sentence when inferencing")
     parser.add_argument('--decode', type=str, required=True, default="greedy", help="greedy or beam?")
     parser.add_argument('--dataset_name', type=str, required=False, help="path to config file")
+    parser.add_argument('--num_epochs', type=int, default=constants.num_epochs, required=False, help="path to config file")
 
+    # parser.add_argument('--use_rope', type=str2bool, default = USE_ROPE, required=True, help="use rope or pe")
     args = parser.parse_args()
+    # constants.USE_ROPE = args.use_rope
+    # print(f"Global Rope Setting Updated to: {constants.USE_ROPE}")
+    constants.num_epochs = args.num_epochs
+    print(f"Number of train epoch: {constants.num_epochs}")
 
     if args.mode == 'train':
         if args.ckpt_name is not None:
@@ -628,7 +639,7 @@ if __name__=='__main__':
             dataset_name=DATASET_NAME,
             src_sp=manager.src_sp,
             trg_sp=manager.trg_sp,
-            split='test[:1000]',  # Or 'validation' if test doesn't exist
+            split='train[:10]',  # Or 'validation' if test doesn't exist
             workers = 0,
             my_batch_size = 1
         )
