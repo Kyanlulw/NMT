@@ -130,7 +130,7 @@ class Manager():
             
             # Get the standard PyTorch dataloader
             train_loader = get_dataloader(self.dataset_name, self.src_sp, self.trg_sp, split = 'train[:100]')
-            valid_loader = get_dataloader(self.dataset_name, self.src_sp, self.trg_sp, split = 'validation')
+            valid_loader = get_dataloader(self.dataset_name, self.src_sp, self.trg_sp, split = 'validation[:100]')
 
             num_update_steps_per_epoch = len(train_loader)
             max_train_steps = int(constants.num_epochs) * num_update_steps_per_epoch
@@ -639,7 +639,7 @@ if __name__=='__main__':
             dataset_name=DATASET_NAME,
             src_sp=manager.src_sp,
             trg_sp=manager.trg_sp,
-            split='test[:10]',  # Or 'validation' if test doesn't exist
+            split='train[:10]',  # Or 'validation' if test doesn't exist
             workers = 0,
             my_batch_size = 1
         )
