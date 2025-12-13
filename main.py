@@ -302,7 +302,7 @@ class Manager():
         src_tensor = torch.LongTensor(input_ids).unsqueeze(0).to(my_device)  # (1, L)
 
         # 2. Create Mask
-        e_mask = (src_tensor != self.pad_id).unsqueeze(1).unsqueeze(2)
+        e_mask = (src_tensor != pad_id).unsqueeze(1).unsqueeze(2)
 
         if self.device.type == 'cuda':
             torch.cuda.synchronize()
@@ -638,7 +638,7 @@ if __name__=='__main__':
             dataset_name=DATASET_NAME,
             src_sp=manager.src_sp,
             trg_sp=manager.trg_sp,
-            split='test[:500]',  # Or 'validation' if test doesn't exist
+            split='test[:10]',  # Or 'validation' if test doesn't exist
             workers = 0,
             my_batch_size = 1
         )
