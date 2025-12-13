@@ -317,7 +317,7 @@ class Manager():
             src_emb = self.model.src_embedding(src_tensor)
 
 
-            src_emb = self.model.positional_encoding(src_emb)
+            # src_emb = self.model.positional_encoding(src_emb)
 
             # 3. Pass to Encoder
             e_output = self.model.encoder(src_emb, e_mask)
@@ -491,8 +491,7 @@ class Manager():
             # For now, we assume standard full-forward pass.
             with torch.amp.autocast('cuda', enabled=True):  # Enable FP16 for speed
                 trg_emb = model_engine.trg_embedding(trg_input)
-
-                trg_emb = model_engine.positional_encoding(trg_emb)
+                # trg_emb = model_engine.positional_encoding(trg_emb)
                 decoder_output = model_engine.decoder(trg_emb, e_output, e_mask, d_mask)
                 logits = model_engine.output_linear(decoder_output[:, -1, :])
                 log_probs = torch.log_softmax(logits, dim=-1)  # (Beam, Vocab)
@@ -599,15 +598,6 @@ class Manager():
         return src_mask, tgt_mask
 
 
-def str2bool(v):
-    if isinstance(v, bool):
-        return v
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
-        return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-        return False
-    else:
-        raise argparse.ArgumentTypeError('Boolean value expected.')
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', required=True, help="train or inference?")
