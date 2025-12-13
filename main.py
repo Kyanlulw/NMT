@@ -133,7 +133,8 @@ class Manager():
             valid_loader = get_dataloader(self.dataset_name, self.src_sp, self.trg_sp, split = 'validation')
 
             num_update_steps_per_epoch = len(train_loader)
-            max_train_steps = constants.num_epochs * num_update_steps_per_epoch
+            epochs = constants.num_epochs
+            max_train_steps = epochs * num_update_steps_per_epoch
 
             # Create the Scheduler
             self.lr_scheduler = get_scheduler(
