@@ -19,7 +19,7 @@ class Transformer(nn.Module):
         # Use PE only when NOT using RoPE
         self.positional_encoding = None
         if not constants.USE_ROPE:
-            self.positional_encoding = PositionalEncoder(d_model=d_model, max_len=2048)
+            self.positional_encoding = PositionalEncoder(d_model=d_model, max_len=5000)
 
         self.encoder = Encoder()
         self.decoder = Decoder()
