@@ -637,8 +637,8 @@ if __name__=='__main__':
         assert args.input is not None, "Please specify the input sentence to translate."
         assert args.decode == 'greedy' or args.decode =='beam', "Please specify correct decoding method, either 'greedy' or 'beam'."
        
-        manager = Manager(is_train=False, ckpt_name=args.ckpt_name, use_rope=args.use_rope, verbose = args.verbose)
-        manager.inference(args.input, args.decode)
+        manager = Manager(is_train=False, ckpt_name=args.ckpt_name, use_rope=args.use_rope)
+        manager.inference(args.input, args.decode, verbose = args.verbose)
     elif args.mode == 'evaluate':
         # Load the best checkpoint
         assert args.ckpt_name is not None, "Provide a checkpoint!"
