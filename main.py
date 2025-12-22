@@ -155,7 +155,7 @@ class Manager():
         if self.accelerator.is_main_process:
             print("Training starts.")
 
-        my_num_epochs = num_epochs
+        my_num_epochs = constants.num_epochs
 
         # 1. Initialize Global Step
         global_step = 0
@@ -617,9 +617,12 @@ if __name__=='__main__':
     parser.add_argument('--decode', type=str, required=True, default="greedy", help="greedy or beam?")
     parser.add_argument('--dataset_name', type=str, required=False, help="path to config file")
     parser.add_argument('--use_rope', type=str2bool, default = USE_ROPE, required=True, help="use rope or pe")
+    parser.add_argument('--num_epochs', type=int, default = constants.num_epochs, required=False, help="use rope or pe")
     args = parser.parse_args()
     constants.USE_ROPE = args.use_rope
+    constants.num_epochs = args.num_epochs
     print(f"Global Rope Setting Updated to: {constants.USE_ROPE}")
+    print(f"Number of train epoch: {constants.num_epochs}")
 
     if args.mode == 'train':
         if args.ckpt_name is not None:
