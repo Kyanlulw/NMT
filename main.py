@@ -9,6 +9,7 @@ from torch import nn
 from accelerate import Accelerator
 from custom_data import get_dataloader
 from transformers import get_scheduler
+from comet import download_model, load_from_checkpoint
 
 import wandb
 import constants
@@ -344,104 +345,83 @@ class Manager():
         # CRITICAL: You must return the string!
         return result
 
-
-    # Add this inside your Manager class
-    def evaluate_bleu(self, test_loader, beam_size=beam_size):
-        print(f"Starting BLEU evaluation with Beam Size {beam_size}...")
+    def evaluate_all(self, test_loader, beam_size=3):
+        print(f"\n--- Starting Evaluation (BLEU + COMET) ---")
         self.model.eval()
 
         predictions = []
         references = []
+        sources = []  # <--- COMET cần thêm cái này (Source sentences)
 
-        # 1. Disable Gradients to save memory
         with torch.no_grad():
-            # We iterate one by one (or batch if beam search supports it)
-            # Since beam search is single-sample, we loop.
             for i, batch in tqdm(enumerate(test_loader), desc="Translating", total=len(test_loader)):
-
-                # Unpack - we only need source for inference
                 src_padded, tgt_in_padded, tgt_out_padded = batch
-                # We iterate through the batch (because beam_search handles 1 item at a time)
-                # Note: This is slow but simple. Optimized beam search does batching.
+
                 for j in range(src_padded.size(0)):
-
+                    # 1. Lấy Source Text
                     src_ids = src_padded[j].tolist()
-                    # Filter out pad_id
                     src_ids = [x for x in src_ids if x != pad_id and x != eos_id]
-
-
                     src_text = self.src_sp.DecodeIds(src_ids)
 
+                    # 2. Lấy Reference Text
                     ref_ids = tgt_out_padded[j].tolist()
                     ref_ids = [x for x in ref_ids if x != -100 and x != pad_id and x != eos_id]
                     ref_text = self.trg_sp.DecodeIds(ref_ids)
 
-
-
-                    # Note: We need to ensure inference() returns the STRING, not print it.
+                    # 3. Lấy Prediction Text (Chạy Inference)
+                    # Lưu ý: method='beam' hay 'greedy' tùy bạn chọn
                     pred_text = self.inference(src_text, method='beam', verbose=False)
+
+                    # 4. Lưu vào list
                     predictions.append(pred_text)
-                    #a
                     references.append(ref_text)
+                    sources.append(src_text)  # <--- Lưu source
 
-                    if i < 3 and j == 0:
-                        if self.accelerator.is_main_process:
-                            print(f"\nSrc: {src_text}")
-                            print(f"Ref: {ref_text}")
-                            print(f"Pred: {pred_text}")
+                    # In thử vài câu đầu để check
+                    if i < 2 and j == 0 and self.accelerator.is_main_process:
+                        print(f"\n[Debug] Src: {src_text}")
+                        print(f"[Debug] Ref: {ref_text}")
+                        print(f"[Debug] Pred: {pred_text}")
 
-
-        # 3. Calculate BLEU
-        # SacreBLEU expects references as a list of lists (for multiple refs per sentence)
+        # --- PHẦN 1: TÍNH BLEU ---
+        # SacreBLEU cần references dạng list of lists: [[ref1_doc1, ref1_doc2...]]
         bleu = sacrebleu.corpus_bleu(predictions, [references])
+        print(f"\n>>> BLEU Score: {bleu.score:.2f}")
 
-        print(f"\n---------------------------------")
-        print(f"BLEU Score: {bleu.score}")
-        print(f"---------------------------------")
+        # --- PHẦN 2: TÍNH COMET ---
+        print("\n>>> Calculating COMET Score (Waiting for model load)...")
 
-        return bleu.score
-        
-    def greedy_search(self, e_output, e_mask):
-        last_words = torch.LongTensor([pad_id] * seq_len).to(device) # (L)
-        last_words[0] = bos_id # (L)
-        cur_len = 1
+        # Quan trọng: Chuẩn bị dữ liệu chuẩn format của COMET
+        data = [
+            {"src": s, "mt": p, "ref": r}
+            for s, p, r in zip(sources, predictions, references)
+        ]
 
-        for i in range(seq_len):
-            d_mask = (last_words.unsqueeze(0) != pad_id).unsqueeze(1).to(device) # (1, 1, L)
-            nopeak_mask = torch.ones([1, seq_len, seq_len], dtype=torch.bool).to(device)  # (1, L, L)
-            nopeak_mask = torch.tril(nopeak_mask)  # (1, L, L) to triangular shape
-            d_mask = d_mask & nopeak_mask  # (1, L, L) padding false
+        # Mẹo: Đẩy model dịch của bạn về CPU để nhường GPU cho COMET (tránh OOM)
+        self.model.to('cpu')
+        torch.cuda.empty_cache()
 
-            trg_embedded = self.model.trg_embedding(last_words.unsqueeze(0))
-            trg_positional_encoded = self.model.positional_encoder(trg_embedded)
-            decoder_output = self.model.decoder(
-                trg_positional_encoded,
-                e_output,
-                e_mask,
-                d_mask
-            ) # (1, L, d_model)
+        try:
+            # Load COMET Model (Dùng model wmt22-comet-da là chuẩn nhất hiện nay)
+            model_path = download_model("Unbabel/wmt22-comet-da")
+            comet_model = load_from_checkpoint(model_path)
 
-            output = self.model.softmax(
-                self.model.output_linear(decoder_output)
-            ) # (1, L, trg_vocab_size)
+            # Tính điểm (gpus=1 để chạy GPU)
+            # batch_size: Giảm xuống 8 hoặc 4 nếu bị tràn VRAM
+            model_output = comet_model.predict(data, batch_size=16, gpus=1)
 
-            output = torch.argmax(output, dim=-1) # (1, L)
-            last_word_id = output[0][i].item()
-            
-            if i < seq_len-1:
-                last_words[i+1] = last_word_id
-                cur_len += 1
-            
-            if last_word_id == eos_id:
-                break
+            print(f">>> COMET Score: {model_output.system_score * 100:.2f}")  # Nhân 100 cho dễ nhìn
 
-        if last_words[-1].item() == pad_id:
-            decoded_output = last_words[1:cur_len].tolist()
-        else:
-            decoded_output = last_words[1:].tolist()
-        decoded_output = self.trg_sp.decode_ids(decoded_output)
-        
-        return decoded_output
+            # (Optional) Trả model dịch về lại GPU nếu muốn train tiếp
+            self.model.to(self.device)
+
+            return bleu.score, model_output.system_score
+
+        except Exception as e:
+            print(f"Lỗi khi tính COMET: {e}")
+            # Trả về BLEU thôi nếu COMET lỗi
+            self.model.to(self.device)
+            return bleu.score, 0.0
 
     def beam_search(self, e_output, e_mask, accelerator=None):
         # 1. Setup & Constants
@@ -649,12 +629,12 @@ if __name__=='__main__':
             dataset_name=DATASET_NAME,
             src_sp=manager.src_sp,
             trg_sp=manager.trg_sp,
-            split='test[:100]',  # Or 'validation' if test doesn't exist
+            split='test[:10]',  # Or 'validation' if test doesn't exist
             workers = 0,
             my_batch_size = 1
         )
 
-        manager.evaluate_bleu(test_loader, beam_size=beam_size)
+        manager.evaluate_all(test_loader, beam_size=beam_size)
 
     else:
         print("Please specify mode argument either with 'train' or 'inference'.")

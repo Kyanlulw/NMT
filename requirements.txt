@@ -6,3 +6,4 @@ tqdm >= 4.64.1
 accelerate >= 0.18.0
 wandb >= 0.15.4
 sacrebleu >= 1.5.1
+comet >= 0.3.2
