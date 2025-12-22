@@ -618,6 +618,7 @@ if __name__=='__main__':
     parser.add_argument('--dataset_name', type=str, required=False, help="path to config file")
     parser.add_argument('--use_rope', type=str2bool, default = USE_ROPE, required=True, help="use rope or pe")
     parser.add_argument('--num_epochs', type=int, default = constants.num_epochs, required=False, help="use rope or pe")
+    parser.add_argument('--verbose', type=str2bool, default = True, required=False, help="verbose")
     args = parser.parse_args()
     constants.USE_ROPE = args.use_rope
     constants.num_epochs = args.num_epochs
@@ -636,7 +637,7 @@ if __name__=='__main__':
         assert args.input is not None, "Please specify the input sentence to translate."
         assert args.decode == 'greedy' or args.decode =='beam', "Please specify correct decoding method, either 'greedy' or 'beam'."
        
-        manager = Manager(is_train=False, ckpt_name=args.ckpt_name, use_rope=args.use_rope)
+        manager = Manager(is_train=False, ckpt_name=args.ckpt_name, use_rope=args.use_rope, verbose = args.verbose)
         manager.inference(args.input, args.decode)
     elif args.mode == 'evaluate':
         # Load the best checkpoint
@@ -648,7 +649,7 @@ if __name__=='__main__':
             dataset_name=DATASET_NAME,
             src_sp=manager.src_sp,
             trg_sp=manager.trg_sp,
-            split='test[:500]',  # Or 'validation' if test doesn't exist
+            split='test[:100]',  # Or 'validation' if test doesn't exist
             workers = 0,
             my_batch_size = 1
         )
