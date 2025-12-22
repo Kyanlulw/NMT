@@ -317,7 +317,10 @@ class Manager():
 
         with torch.no_grad():
             # 1. Embed
-            src_emb = self.model.src_embedding(src_tensor) * math.sqrt(d_model)
+            if constants.USE_ROPE:
+                src_emb = self.model.src_embedding(src_tensor) * math.sqrt(d_model)
+            else:
+                src_emb = self.model.src_embedding(src_tensor)
 
             if hasattr(self.model, "positional_encoding") and self.model.positional_encoding is not None:
                 src_emb = self.model.positional_encoding(src_emb)
