@@ -184,11 +184,6 @@ class PositionalEncoder(nn.Module):
         # Add batch dimension: (1, max_len, d_model)
         pe = pe.unsqueeze(0)
 
-        # 3. THE MAGIC LINE
-        # We register it as a "buffer".
-        # - It is NOT a parameter (won't be updated by optimizer).
-        # - It WILL be moved to GPU automatically by Accelerator.
-        # - It WILL be saved in state_dict.
         self.register_buffer('pe', pe)
 
     def forward(self, x):
@@ -197,9 +192,6 @@ class PositionalEncoder(nn.Module):
         # Scale embedding (Standard Transformer practice)
         x = x * math.sqrt(x.size(-1))
 
-        # Add PE
-        # We slice self.pe to the length of the current input x
-        # self.pe is already on the correct device!
         x = x + self.pe[:, :x.size(1), :]
 
         return x

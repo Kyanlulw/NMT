@@ -106,7 +106,7 @@ class Manager():
             if os.path.exists(ckpt_path):
                 # Map location 'cpu' is safest to avoid GPU OOM on load
                 checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only = False)
-                incompatible = self.model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+                incompatible = self.model.load_state_dict(checkpoint['model_state_dict'], strict=True)
                 #fuck
                 # self.model.load_state_dict(checkpoint['model_state_dict'], strict = True)
                 self.optim.load_state_dict(checkpoint['optim_state_dict'])
@@ -321,8 +321,6 @@ class Manager():
                 src_emb = self.model.src_embedding(src_tensor) * math.sqrt(d_model)
             else:
                 src_emb = self.model.src_embedding(src_tensor)
-
-            if hasattr(self.model, "positional_encoding") and self.model.positional_encoding is not None:
                 src_emb = self.model.positional_encoding(src_emb)
 
             # 3. Pass to Encoder
@@ -496,7 +494,7 @@ class Manager():
             with torch.amp.autocast('cuda', enabled=True):  # Enable FP16 for speed
                 trg_emb = model_engine.trg_embedding(trg_input)
 
-                if hasattr(model_engine, "positional_encoding") and model_engine.positional_encoding is not None:
+                if not constants.USE_ROPE:
                     trg_emb = model_engine.positional_encoding(trg_emb)
                 else:
                     trg_emb = trg_emb * math.sqrt(d_model)
