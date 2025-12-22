@@ -403,39 +403,39 @@ class Manager():
 
         return bleu.score
         
-    def greedy_search(self, e_output, e_mask):
-        last_words = torch.LongTensor([pad_id] * seq_len).to(device) # (L)
-        last_words[0] = bos_id # (L)
-        cur_len = 1
-
-        for i in range(seq_len):
-            d_mask = (last_words.unsqueeze(0) != pad_id).unsqueeze(1).to(device) # (1, 1, L)
-            nopeak_mask = torch.ones([1, seq_len, seq_len], dtype=torch.bool).to(device)  # (1, L, L)
-            nopeak_mask = torch.tril(nopeak_mask)  # (1, L, L) to triangular shape
-            d_mask = d_mask & nopeak_mask  # (1, L, L) padding false
-
-            trg_embedded = self.model.trg_embedding(last_words.unsqueeze(0))
-            trg_positional_encoded = self.model.positional_encoder(trg_embedded)
-            decoder_output = self.model.decoder(
-                trg_positional_encoded,
-                e_output,
-                e_mask,
-                d_mask
-            ) # (1, L, d_model)
-
-            output = self.model.softmax(
-                self.model.output_linear(decoder_output)
-            ) # (1, L, trg_vocab_size)
-
-            output = torch.argmax(output, dim=-1) # (1, L)
-            last_word_id = output[0][i].item()
-            
-            if i < seq_len-1:
-                last_words[i+1] = last_word_id
-                cur_len += 1
-            
-            if last_word_id == eos_id:
-                break
+    # def greedy_search(self, e_output, e_mask):
+    #     last_words = torch.LongTensor([pad_id] * seq_len).to(device) # (L)
+    #     last_words[0] = bos_id # (L)
+    #     cur_len = 1
+    #
+    #     for i in range(seq_len):
+    #         d_mask = (last_words.unsqueeze(0) != pad_id).unsqueeze(1).to(device) # (1, 1, L)
+    #         nopeak_mask = torch.ones([1, seq_len, seq_len], dtype=torch.bool).to(device)  # (1, L, L)
+    #         nopeak_mask = torch.tril(nopeak_mask)  # (1, L, L) to triangular shape
+    #         d_mask = d_mask & nopeak_mask  # (1, L, L) padding false
+    #
+    #         trg_embedded = self.model.trg_embedding(last_words.unsqueeze(0))
+    #         trg_positional_encoded = self.model.positional_encoder(trg_embedded)
+    #         decoder_output = self.model.decoder(
+    #             trg_positional_encoded,
+    #             e_output,
+    #             e_mask,
+    #             d_mask
+    #         ) # (1, L, d_model)
+    #
+    #         output = self.model.softmax(
+    #             self.model.output_linear(decoder_output)
+    #         ) # (1, L, trg_vocab_size)
+    #
+    #         output = torch.argmax(output, dim=-1) # (1, L)
+    #         last_word_id = output[0][i].item()
+    #
+    #         if i < seq_len-1:
+    #             last_words[i+1] = last_word_id
+    #             cur_len += 1
+    #
+    #         if last_word_id == eos_id:
+    #             break
 
         if last_words[-1].item() == pad_id:
             decoded_output = last_words[1:cur_len].tolist()
@@ -489,59 +489,50 @@ class Manager():
             nopeak_mask = torch.tril(torch.ones((trg_len, trg_len), device=my_device)).bool()
             d_mask = d_pad_mask & nopeak_mask.unsqueeze(0)
 
-            # --- FORWARD PASS (Run 4 beams at once) ---
-            # Note: If you implement KV Caching, this changes significantly.
-            # For now, we assume standard full-forward pass.
+
             with torch.amp.autocast('cuda', enabled=True):  # Enable FP16 for speed
                 trg_emb = model_engine.trg_embedding(trg_input)
 
-                trg_emb = trg_emb * math.sqrt(d_model)
-                # trg_emb = model_engine.positional_encoding(trg_emb)
+                if hasattr(model_engine, "positional_encoding") and model_engine.positional_encoding is not None:
+                    trg_emb = model_engine.positional_encoding(trg_emb)
+                else:
+                    trg_emb = trg_emb * math.sqrt(d_model)
                 decoder_output = model_engine.decoder(trg_emb, e_output, e_mask, d_mask)
                 logits = model_engine.output_linear(decoder_output[:, -1, :])
                 log_probs = torch.log_softmax(logits, dim=-1)  # (Beam, Vocab)
 
-            # --- CALCULATE SCORES ---
-            # Add current scores to log_probs
-            # Shape: (Beam, Vocab)
             next_scores = cur_scores.unsqueeze(1) + log_probs
 
-            # --- RANKING & SELECTION ---
-            # We flatten the matrix to find the top K the best tokens across ALL beams
-            # Shape: (Beam * Vocab)
+
             next_scores_flat = next_scores.view(-1)
 
             if pos == 0:
-                # On the first step, we only look at the first beam (since all others are duplicates)
-                # otherwise we get the same 4 words.
+
                 next_scores_flat = next_scores[0]  # (Vocab)
 
-            # Get top K best scores and their indices
+
             topk_scores, topk_indices = torch.topk(next_scores_flat, beam_size, dim=0)
 
-            # Convert flat indices back to (Beam_Index, Word_Index)
-            vocab_size = log_probs.size(-1)
-            beam_indices = topk_indices.div(vocab_size, rounding_mode='floor')  # Which beam did it come from?
-            word_indices = topk_indices % vocab_size  # Which word is it?
 
-            # --- BUILD NEXT STEP ---
+            vocab_size = log_probs.size(-1)
+            beam_indices = topk_indices.div(vocab_size, rounding_mode='floor')
+            word_indices = topk_indices % vocab_size
+
+
             new_seqs = []
             new_scores = []
 
             num_active = 0
 
             for i in range(beam_size):
-                b_idx = beam_indices[i]  # Index of the parent beam
-                w_idx = word_indices[i]  # The new word
+                b_idx = beam_indices[i]
+                w_idx = word_indices[i]
                 score = topk_scores[i]
 
-                # Reconstruct the sequence: Parent Sequence + New Word
-                # Note: We must clone to avoid reference issues
+
                 seq = torch.cat([cur_seq[b_idx], w_idx.unsqueeze(0)])
 
                 if w_idx.item() == eos_id:
-                    # Finished!
-                    # Length Penalty
                     penalty_score = score / len(seq)
                     finished_seqs.append(seq)
                     finished_scores.append(penalty_score)
@@ -550,31 +541,24 @@ class Manager():
                     new_scores.append(score)
                     num_active += 1
 
-            # Check if we have enough finished sequences
             if len(finished_seqs) >= beam_size:
                 break
 
-            # Pad new_seqs if we lost some beams to EOS (to keep batch size constant)
-            # This keeps the tensor shape valid for the next model run
-            while len(new_seqs) < beam_size:
-                new_seqs.append(new_seqs[0])  # Duplicate the best one (it won't matter, it effectively forks)
-                new_scores.append(torch.tensor(-1e9, device = my_device))  # Give it bad score so it dies next round
 
-            # Stack back into tensors
-            cur_seq = torch.stack(new_seqs)  # (Beam, Len)
-            cur_scores = torch.stack(new_scores)  # (Beam)
+            while len(new_seqs) < beam_size:
+                new_seqs.append(new_seqs[0])
+                new_scores.append(torch.tensor(-1e9, device = my_device))
+
+            cur_seq = torch.stack(new_seqs)
+            cur_scores = torch.stack(new_scores)
 
         # 5. Final Selection
         if len(finished_seqs) == 0:
             best_seq = cur_seq[0]
         else:
-            # Sort by best score (Higher is better for LogProbs, but check your sign!)
-            # Since log_probs are negative, closer to 0 is better.
-            # Using sorted(reverse=True) because -0.5 > -10.0
             sorted_finished = sorted(zip(finished_seqs, finished_scores), key=lambda x: x[1], reverse=True)
             best_seq = sorted_finished[0][0]
 
-        # Clean up (remove BOS/EOS)
         best_seq = best_seq.tolist()
         if best_seq[0] == bos_id: best_seq = best_seq[1:]
         if best_seq[-1] == eos_id: best_seq = best_seq[:-1]

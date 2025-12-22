@@ -21,6 +21,8 @@ trg_model_prefix = 'vietnamese_toknizer_spm'
 sp_vocab_size = 16000
 character_coverage = 1.0
 model_type = 'unigram'
+src_language = 'en'
+trg_language = 'vi'
 
 # Parameters for Transformer & training
 num_workers = 4
