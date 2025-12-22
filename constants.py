@@ -5,22 +5,19 @@ DATASET_NAME = 'ncduy/mt-en-vi'
 SP_DIR = 'trained_tokenizer'
 SRC_DIR = 'src'
 TRG_DIR = 'trg'
-SRC_RAW_DATA_NAME = 'raw_data.src'
-TRG_RAW_DATA_NAME = 'raw_data.trg'
-TRAIN_NAME = 'train.txt'
-VALID_NAME = 'valid.txt'
-TEST_NAME = 'test.txt'
 
 # Parameters for sentencepiece tokenizer
 pad_id = 3
 bos_id = 1
 eos_id = 2
 unk_id = 0  
-src_model_prefix = 'english_toknizer_spm'
-trg_model_prefix = 'vietnamese_toknizer_spm'
+src_model_prefix = 'vietnamese_toknizer_spm'
+trg_model_prefix = 'english_toknizer_spm'
 sp_vocab_size = 16000
 character_coverage = 1.0
 model_type = 'unigram'
+src_language = 'vi'
+trg_language = 'en'
 
 # Parameters for Transformer & training
 num_workers = 4

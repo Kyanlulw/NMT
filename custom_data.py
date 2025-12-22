@@ -9,6 +9,7 @@ from datasets import load_dataset , Dataset
 from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 import torch
+import constants
 
 def get_dataloader(dataset_name, src_sp, trg_sp, my_batch_size = batch_size, split = '', workers = num_workers):
     print(f"Loading {dataset_name}...")
@@ -23,11 +24,11 @@ def get_dataloader(dataset_name, src_sp, trg_sp, my_batch_size = batch_size, spl
         # Handle Hugging Face structure
         if 'translation' in examples:
             iter_data = examples['translation']
-            src_texts = [x['en'] for x in iter_data]
-            tgt_texts = [x['vi'] for x in iter_data]
+            src_texts = [x[constants.src_language] for x in iter_data]
+            tgt_texts = [x[constants.trg_language] for x in iter_data]
         else:
-            src_texts = examples['en']
-            tgt_texts = examples['vi']
+            src_texts = examples[constants.src_language]
+            tgt_texts = examples[constants.trg_language]
 
         max_len = seq_len
         # Tokenize Source
