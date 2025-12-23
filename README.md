@@ -53,6 +53,7 @@ accelerate launch main.py \
     --verbose="true" \
     --use_rope="true" \
     --decode="beam" \
+    --num_epochs={int}
     --ckpt_name="./checkpoints/your_checkpoint.pth"
 ```
 
