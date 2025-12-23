@@ -4,7 +4,6 @@ from tqdm import tqdm
 from constants import *
 from custom_data import *
 from transformer import *
-from data_structure import *
 from torch import nn
 from accelerate import Accelerator
 from custom_data import get_dataloader
