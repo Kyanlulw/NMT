@@ -1,4 +1,4 @@
-# English-Vietnamese Machine Translation Project 🇻🇳🇺🇸
+# English-Vietnamese Machine Translation Project and Medical-VLSP dataset LLM finetune for Machine Translation
 
 This repository contains the implementation of English-Vietnamese machine translation systems using two different approaches:
 1.  **Fundamental Approach:** Training a Transformer model from scratch using PyTorch and Accelerate.
@@ -12,7 +12,7 @@ This repository contains the implementation of English-Vietnamese machine transl
 
 ---
 
-## I. Part 1: Fundamentals (Transformer from Scratch)
+## I. Part 1: Transformers from scratch
 
 In this section, we implemented a Transformer-based architecture to translate general English-Vietnamese text.
 
@@ -66,5 +66,14 @@ accelerate launch main.py \
     --ckpt_name="./checkpoints/your_checkpoint.pth"
 ```
 ### Result:
-* **Eng to Vie: 29.74 Bleu score & 78.69 Comet score.**
-* **Vie to Eng: 26.73 Bleu score & 76.63 Comet score.**
+* **Eng to Vie**: 29.74 Bleu score & 78.69 Comet score.
+* **Vie to Eng**: 26.73 Bleu score & 76.63 Comet score.
+
+## II. Part 2: Qwen2.5-0.5B finetune for Machine Translation task on Medical domain.
+#### Technique:
+* QLora with rank = 64 and lora_alpha=128.
+* Instruction Tunning.
+#### Result:
+**Bleu: Higher is better, TER: Lower is better, METEOR: Higher is better**
+* **Eng to Vie**: 13.55 Bleu score & 119.08 TER score & 0.3861 METEOR score.
+* **Vie to Eng**: 19.17 Bleu score & 88.35 TER score & 0.4518 METEOR score.
